@@ -1,0 +1,55 @@
+# Dangal 24x7 — AI debate show
+
+Dangal 24x7: anchor Ritika Rathore hosts two AI panelists who debate a topic in Hindi,
+with local voices (Piper). A judge picks a winner, and every debate is saved as JSON plus
+audio (the input for the video and Shorts stages).
+
+## Setup (Ubuntu)
+
+```bash
+# 1. Install Ollama (local LLM server, runs as a systemd service)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Download a model (~3 GB), then make the variant that fits fully on a 4 GB GPU
+ollama pull gemma3:4b
+ollama create gemma3-gpu -f config/ollama/Modelfile.gemma3-gpu
+
+# 3. Python environment
+cd ~/automation-projects/yt_debate
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+## Run
+
+```bash
+.venv/bin/python debate.py "क्या पुरानी पेंशन स्कीम वापस आनी चाहिए?"     # one debate, spoken aloud
+.venv/bin/python debate.py                                # interactive, keep entering topics
+.venv/bin/python debate.py --for imran "..."              # choose who argues FOR
+.venv/bin/python debate.py --cast pandit,bunty "..."      # other panelists
+.venv/bin/python debate.py --silent "..."                 # save audio, don't play it
+.venv/bin/python debate.py --no-voice --language english "Tea vs coffee"   # text only
+```
+
+`Ctrl+C` stops a debate and saves what was said so far.
+
+Voices: each character's `voice:` block (Piper model, speed, pitch, and `call: true`
+for the video-call sound) lives in `config/characters/<name>.yaml`. Voices download to
+`models/piper/` on first use. Debates in Hindi script sound best; turns that slip into
+English letters are converted to Devanagari automatically before being spoken.
+
+## Where things live
+
+| Path | What |
+|---|---|
+| `config/settings.yaml` | Model, language, rounds, words per turn |
+| `config/characters/*.yaml` | Personalities, edit these to tune the comedy |
+| `config/blocklist.txt` | Words that reject a topic |
+| `data/debates/<id>.json` | Saved debate: text, timings, and each turn's offset in `full.wav` |
+| `data/debates/<id>/` | Audio: one WAV per turn plus `full.wav` |
+| `data/scoreboard.json` | Win/loss record and streaks (delete to reset) |
+
+## Switching to a cloud LLM later
+
+Change `llm.base_url`, `llm.api_key` and `llm.model` in `config/settings.yaml` to any
+OpenAI-compatible endpoint. No code changes.

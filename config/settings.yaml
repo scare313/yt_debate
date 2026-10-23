@@ -1,0 +1,28 @@
+# LLM backend. Any OpenAI-compatible server works:
+#   local Ollama : http://localhost:11434/v1   (api_key can be anything)
+#   cloud later  : just change base_url / api_key / model
+llm:
+  base_url: http://localhost:11434/v1
+  api_key: ollama
+  model: gemma3-gpu         # gemma3:4b fitted to the 4 GB GPU (config/ollama/); CPU-only: gemma3:4b
+  temperature: 0.9          # higher = wilder, funnier, less coherent
+  judge_temperature: 0.3
+
+debate:
+  language: hindi           # hindi (best with the Hindi voices) | hinglish | english
+  rebuttal_rounds: 2        # opening + N rebuttals + closing
+  max_words_per_turn: 50
+  history_turns: 6          # how many previous turns each speaker sees
+
+# The two debaters and the host, by file name in config/characters/
+cast:
+  host: ritika
+  debaters: [imran, tiwari]
+
+# Text-to-speech (Piper, runs locally on the CPU). Each character's voice is set in its
+# own file under config/characters/ (voice: model / speed / pitch / call).
+voice:
+  enabled: true             # --no-voice turns it off for one run
+  models_dir: models/piper  # voices download here on first use
+  call_filter: true         # characters with "call: true" sound like a video call; false = all studio
+  gap_seconds: 0.35         # pause between speakers

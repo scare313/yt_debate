@@ -1,0 +1,6 @@
+# gemma3:4b tuned to fit fully on a 4 GB GPU (GTX 1650).
+# Smaller context (3072 instead of 4096) leaves room for every layer on the card.
+# Create with: ollama create gemma3-gpu -f config/ollama/Modelfile.gemma3-gpu
+FROM gemma3:4b
+PARAMETER num_ctx 3072
+PARAMETER num_gpu 99

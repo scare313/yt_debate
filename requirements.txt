@@ -1,0 +1,5 @@
+openai>=1.40
+pyyaml>=6.0
+rich>=13.0
+piper-tts>=1.8
+numpy>=2.0

@@ -1,0 +1,9 @@
+# One word or phrase per line. Topics containing any of these are rejected.
+# Lines starting with # are ignored. Matching is case-insensitive, whole words.
+# Add slurs, extremist terms and anything you never want on stream.
+suicide
+self-harm
+rape
+terrorist attack
+genocide
+porn
