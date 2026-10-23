@@ -29,7 +29,19 @@ python3 -m venv .venv
 .venv/bin/python debate.py --cast pandit,bunty "..."      # other panelists
 .venv/bin/python debate.py --silent "..."                 # save audio, don't play it
 .venv/bin/python debate.py --no-voice --language english "Tea vs coffee"   # text only
+.venv/bin/python debate.py --comment "Rohit_from_Pune: तिवारी जी, कुछ बोलिए!" "..."   # viewer comment on air
+.venv/bin/python debate.py --comments-file comments.txt "..."                     # one "Name: comment" per line
+.venv/bin/python debate.py --format classic "..."         # fixed rounds instead of the news show
 ```
+
+Formats: **news** (default) is a prime-time news debate. Ritika asks each panelist an opening
+question, cross-questions them, panelists sometimes cut in, viewer comments are read on air,
+then final lines and the verdict. **classic** is opening, rebuttals, closing. `--rounds` sets
+the number of cross-questions (news) or rebuttal rounds (classic). Only use real viewer
+comments; names and comments pass through the blocklist.
+
+The judge scores both panelists twice with their order swapped, so speaking last
+doesn't decide the winner.
 
 `Ctrl+C` stops a debate and saves what was said so far.
 

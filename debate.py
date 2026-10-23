@@ -5,9 +5,11 @@
     python debate.py                                # interactive: keep entering topics
     python debate.py --no-voice --language english "Tea vs coffee"     # text only
     python debate.py --silent "..."                 # save audio without playing it
+    python debate.py --comment "Rohit_from_Pune: तिवारी जी कुछ बोलिए!" "..."   # viewer comment on air
 """
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -50,7 +52,10 @@ def load_settings(args) -> dict:
     if args.model:
         cfg["llm"]["model"] = args.model
     if args.rounds is not None:
-        cfg["debate"]["rebuttal_rounds"] = args.rounds
+        cfg["debate"]["rebuttal_rounds"] = args.rounds   # classic
+        cfg["debate"]["exchanges"] = args.rounds         # news
+    if args.format:
+        cfg["debate"]["format"] = args.format
     if args.words:
         cfg["debate"]["max_words_per_turn"] = args.words
     if args.language:
@@ -88,7 +93,26 @@ def make_tts(cfg: dict):
         sys.exit("Piper is not installed. Run: .venv/bin/pip install -r requirements.txt  (or use --no-voice)")
 
 
-def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None) -> bool:
+def load_comments(args, blocklist: Blocklist) -> list[dict]:
+    """Viewer comments as {"name", "text"}. Only real comments: never invent viewers.
+    Both the name and the text go through the blocklist (people pick offensive usernames)."""
+    raw = list(args.comment or [])
+    if args.comments_file:
+        raw += [l for l in Path(args.comments_file).read_text().splitlines() if l.strip() and not l.startswith("#")]
+    comments = []
+    for line in raw:
+        name, sep, text = line.partition(":")
+        name, text = (name.strip(), text.strip()) if sep else ("Viewer", line.strip())
+        name = re.sub(r"[_.@]+", " ", name).strip()[:40] or "Viewer"
+        text = text[:200]
+        if blocklist.check(name) or blocklist.check(text):
+            console.print(f"[yellow]Skipped a comment from '{name}' (blocked term).[/]")
+            continue
+        comments.append({"name": name, "text": text})
+    return comments
+
+
+def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, comments: list[dict] | None = None) -> bool:
     topic = topic.strip()
     if not topic:
         return True
@@ -111,7 +135,7 @@ def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None) -> bool:
 
     console.rule(f"[bold]DEBATE: {topic}[/]")
     try:
-        record = debate.run(topic, for_side=cfg["for_side"])
+        record = debate.run(topic, for_side=cfg["for_side"], comments=comments)
         if voice:
             full = voice.finish()  # waits until the last turn has been played
             if full:
@@ -155,6 +179,9 @@ def main():
     p.add_argument("--language", choices=list(LANGUAGE_RULES), help="debate language")
     p.add_argument("--cast", help="two debaters from config/characters, e.g. rahul,amit")
     p.add_argument("--for", dest="for_side", help="which debater argues FOR (default: random)")
+    p.add_argument("--format", choices=["news", "classic"], help="news: anchor-led show (default); classic: fixed rounds")
+    p.add_argument("--comment", action="append", metavar='"NAME: TEXT"', help="viewer comment read on air (repeatable)")
+    p.add_argument("--comments-file", help="file with one 'Name: comment' per line")
     p.add_argument("--no-voice", action="store_true", help="text only, no TTS")
     p.add_argument("--silent", action="store_true", help="generate and save audio, but don't play it")
     args = p.parse_args()
@@ -162,12 +189,13 @@ def main():
     cfg = load_settings(args)
     blocklist = Blocklist(CONFIG / "blocklist.txt")
     tts = make_tts(cfg)
+    comments = load_comments(args, blocklist)
     console.print(f"[dim]Model: {cfg['llm']['model']} · Language: {cfg['debate']['language']} · "
-                  f"Rebuttal rounds: {cfg['debate']['rebuttal_rounds']} · "
+                  f"Format: {cfg['debate'].get('format', 'news')} · Comments: {len(comments)} · "
                   f"Voice: {'off' if not tts else ('on' if cfg['voice']['play'] else 'save only')}[/]")
 
     if args.topic:
-        sys.exit(0 if run_one(" ".join(args.topic), cfg, blocklist, tts) else 1)
+        sys.exit(0 if run_one(" ".join(args.topic), cfg, blocklist, tts, comments) else 1)
 
     console.print("[bold]Interactive mode.[/] Type a topic and press Enter. 'q' to quit.")
     while True:
@@ -177,7 +205,7 @@ def main():
             break
         if topic.strip().lower() in {"q", "quit", "exit"}:
             break
-        if not run_one(topic, cfg, blocklist, tts):
+        if not run_one(topic, cfg, blocklist, tts, comments):
             break
 
 

@@ -9,10 +9,16 @@ llm:
   judge_temperature: 0.3
 
 debate:
+  format: news              # news: Ritika runs the show | classic: fixed rounds
   language: hindi           # hindi (best with the Hindi voices) | hinglish | english
-  rebuttal_rounds: 2        # opening + N rebuttals + closing
   max_words_per_turn: 50
-  history_turns: 6          # how many previous turns each speaker sees
+  history_turns: 8          # how many previous turns each speaker sees
+  # news format
+  exchanges: 3              # anchor cross-questions after the two opening answers (--rounds)
+  cutin_chance: 0.35        # chance the other panelist interrupts after an answer
+  max_comments: 2           # viewer comments read on air per debate
+  # classic format
+  rebuttal_rounds: 2        # opening + N rebuttals + closing (--rounds)
 
 # The two debaters and the host, by file name in config/characters/
 cast:
