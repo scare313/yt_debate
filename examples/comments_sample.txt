@@ -1,0 +1,13 @@
+# Sample viewer messages: one "Name: message" per line.
+# Replace these with REAL comments copied from your previous Shorts. Never invent viewers.
+Rohit_from_Pune: hi
+Neha: namaste 🙏
+Aman: hello from Indore
+Priya: 😂😂😂🔥
+Kabir: 🔥🔥
+Meena: बिमला आंटी सही हैं
+Vikas: chintu galat hai
+Sonu: chintu op 💯
+Arjun: आंटी, मोनू सच में कनाडा में है या बस बहाना है?
+Pooja: Chintu bhai pehle naukri dhundo phir startup karna, mummy ki chappal ready hai
+Ravi: next topic: chai vs coffee

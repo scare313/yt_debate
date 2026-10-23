@@ -9,7 +9,6 @@
 """
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ import yaml
 from rich.console import Console
 
 from engine.characters import load_character
+from engine.chat import build_chat
 from engine.llm import LLM
 from engine.orchestrator import LANGUAGE_RULES, Debate
 from engine.safety import Blocklist
@@ -93,26 +93,15 @@ def make_tts(cfg: dict):
         sys.exit("Piper is not installed. Run: .venv/bin/pip install -r requirements.txt  (or use --no-voice)")
 
 
-def load_comments(args, blocklist: Blocklist) -> list[dict]:
-    """Viewer comments as {"name", "text"}. Only real comments: never invent viewers.
-    Both the name and the text go through the blocklist (people pick offensive usernames)."""
-    raw = list(args.comment or [])
+def load_chat_lines(args) -> list[str]:
+    """Raw viewer messages, one 'Name: message' per line. Only real comments: never invent viewers."""
+    lines = list(args.comment or [])
     if args.comments_file:
-        raw += [l for l in Path(args.comments_file).read_text().splitlines() if l.strip() and not l.startswith("#")]
-    comments = []
-    for line in raw:
-        name, sep, text = line.partition(":")
-        name, text = (name.strip(), text.strip()) if sep else ("Viewer", line.strip())
-        name = re.sub(r"[_.@]+", " ", name).strip()[:40] or "Viewer"
-        text = text[:200]
-        if blocklist.check(name) or blocklist.check(text):
-            console.print(f"[yellow]Skipped a comment from '{name}' (blocked term).[/]")
-            continue
-        comments.append({"name": name, "text": text})
-    return comments
+        lines += [l for l in Path(args.comments_file).read_text().splitlines() if l.strip() and not l.startswith("#")]
+    return lines
 
 
-def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, comments: list[dict] | None = None) -> bool:
+def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, chat_lines: list[str] | None = None) -> bool:
     topic = topic.strip()
     if not topic:
         return True
@@ -124,6 +113,12 @@ def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, comments: lis
     llm = LLM(cfg["llm"]["base_url"], cfg["llm"]["api_key"], cfg["llm"]["model"])
     host = load_character(CONFIG, cfg["cast"]["host"])
     debaters = [load_character(CONFIG, k) for k in cfg["cast"]["debaters"]]
+    chat = build_chat(chat_lines or [], debaters, blocklist)
+    if chat_lines:
+        r = chat.to_record()
+        console.print(f"[dim]Chat: {len(r['messages'])} shown · {len(r['greeters'])} greetings · "
+                      f"{len(chat.questions())} questions · {sum(r['emoji_counts'].values())} emojis · "
+                      f"votes {r['votes'] or '-'} · {r['blocked']} blocked[/]")
     settings = {**cfg["debate"],
                 "temperature": cfg["llm"]["temperature"],
                 "judge_temperature": cfg["llm"]["judge_temperature"]}
@@ -135,7 +130,7 @@ def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, comments: lis
 
     console.rule(f"[bold]DEBATE: {topic}[/]")
     try:
-        record = debate.run(topic, for_side=cfg["for_side"], comments=comments)
+        record = debate.run(topic, for_side=cfg["for_side"], chat=chat)
         if voice:
             full = voice.finish()  # waits until the last turn has been played
             if full:
@@ -180,8 +175,9 @@ def main():
     p.add_argument("--cast", help="two debaters from config/characters, e.g. rahul,amit")
     p.add_argument("--for", dest="for_side", help="which debater argues FOR (default: random)")
     p.add_argument("--format", choices=["news", "classic"], help="news: anchor-led show (default); classic: fixed rounds")
-    p.add_argument("--comment", action="append", metavar='"NAME: TEXT"', help="viewer comment read on air (repeatable)")
-    p.add_argument("--comments-file", help="file with one 'Name: comment' per line")
+    p.add_argument("--comment", action="append", metavar='"NAME: TEXT"', help="viewer message (repeatable)")
+    p.add_argument("--comments-file", help="viewer messages, one 'Name: message' per line (greetings, emojis, "
+                                           "votes and questions are all handled)")
     p.add_argument("--no-voice", action="store_true", help="text only, no TTS")
     p.add_argument("--silent", action="store_true", help="generate and save audio, but don't play it")
     args = p.parse_args()
@@ -189,13 +185,13 @@ def main():
     cfg = load_settings(args)
     blocklist = Blocklist(CONFIG / "blocklist.txt")
     tts = make_tts(cfg)
-    comments = load_comments(args, blocklist)
+    chat_lines = load_chat_lines(args)
     console.print(f"[dim]Model: {cfg['llm']['model']} · Language: {cfg['debate']['language']} · "
-                  f"Format: {cfg['debate'].get('format', 'news')} · Comments: {len(comments)} · "
+                  f"Format: {cfg['debate'].get('format', 'news')} · Chat messages: {len(chat_lines)} · "
                   f"Voice: {'off' if not tts else ('on' if cfg['voice']['play'] else 'save only')}[/]")
 
     if args.topic:
-        sys.exit(0 if run_one(" ".join(args.topic), cfg, blocklist, tts, comments) else 1)
+        sys.exit(0 if run_one(" ".join(args.topic), cfg, blocklist, tts, chat_lines) else 1)
 
     console.print("[bold]Interactive mode.[/] Type a topic and press Enter. 'q' to quit.")
     while True:
@@ -205,7 +201,7 @@ def main():
             break
         if topic.strip().lower() in {"q", "quit", "exit"}:
             break
-        if not run_one(topic, cfg, blocklist, tts, comments):
+        if not run_one(topic, cfg, blocklist, tts, chat_lines):
             break
 
 

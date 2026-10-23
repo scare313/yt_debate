@@ -34,6 +34,16 @@ python3 -m venv .venv
 .venv/bin/python debate.py --format classic "..."         # fixed rounds instead of the news show
 ```
 
+Viewer chat: pass real comments with `--comments-file` (see `examples/comments_sample.txt`).
+Every message is sorted automatically: greetings become Ritika's welcome roll-call, emojis rain
+on screen, "team X" / "X op" / "X galat" count as poll votes, the best questions are read on air,
+"next topic: ..." is saved as a suggestion, and spam/links/blocklisted words are dropped. Every
+shown message scrolls in the ticker. Limits are in `config/settings.yaml` (`max_chat_breaks`,
+`max_questions`, `rollcall_names`).
+
+Show screen: `.venv/bin/python tools/stage_server.py`, then open http://localhost:8765/ to play
+any voiced debate in the 9:16 news layout. Character art goes in `stage/assets/characters/`.
+
 Formats: **news** (default) is a prime-time news debate. Ritika asks each panelist an opening
 question, cross-questions them, panelists sometimes cut in, viewer comments are read on air,
 then final lines and the verdict. **classic** is opening, rebuttals, closing. `--rounds` sets

@@ -15,6 +15,7 @@ class Character:
     voice: dict = field(default_factory=dict)    # model, speed, pitch, call
     catchphrase: str = ""                        # offered only in the closing statement
     politics: str = ""                           # added to the prompt only for political topics
+    aliases: list = field(default_factory=list)  # other spellings viewers use (votes in chat)
 
 
 def load_character(config_dir: Path, key: str) -> Character:
@@ -29,4 +30,5 @@ def load_character(config_dir: Path, key: str) -> Character:
         voice=data.get("voice") or {},
         catchphrase=data.get("catchphrase", ""),
         politics=(data.get("politics") or "").strip(),
+        aliases=data.get("aliases") or [],
     )

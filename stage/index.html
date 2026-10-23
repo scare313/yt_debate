@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dangal 24x7 — Show Screen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;600;800&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="stage.css">
+</head>
+<body>
+  <div class="controls" id="controls">
+    <select id="pick" title="Debate"></select>
+    <button id="play" title="Play / pause">▶</button>
+    <button id="restart" title="Restart">⟲</button>
+    <span id="time">0:00</span>
+  </div>
+
+  <div id="viewport">
+    <div class="frame vertical" id="frame">
+
+      <header class="topbar">
+        <div class="logo"><span class="logo-main">DANGAL</span><span class="logo-num">24x7</span></div>
+        <span class="badge-satire">AI SATIRE</span>
+        <span class="live"><i></i>LIVE</span>
+        <div class="meter" id="meter">
+          <span class="meter-label">🌶️ ड्रामा मीटर</span>
+          <div class="meter-bar"><i id="meter-fill"></i></div>
+        </div>
+      </header>
+
+      <section class="anchor" id="anchor">
+        <div class="portrait" id="anchor-portrait"></div>
+        <div class="anchor-side">
+          <div class="strip">
+            <div class="strip-name" id="anchor-name"></div>
+            <div class="strip-title" id="anchor-title"></div>
+            <canvas class="wave" id="anchor-wave" width="560" height="70"></canvas>
+          </div>
+          <div class="studio-tag" id="studio-tag"></div>
+          <div class="comment-card" id="comment">
+            <div class="comment-head">
+              <span class="avatar" id="comment-avatar"></span>
+              <span class="comment-who"><b id="comment-name"></b> का सवाल</span>
+              <span class="on-air">ऑन एयर!</span>
+            </div>
+            <div class="comment-text" id="comment-text"></div>
+            <i class="sparkle s1">✨</i><i class="sparkle s2">✨</i><i class="sparkle s3">⭐</i>
+          </div>
+          <div class="welcome-card" id="welcome">
+            <div class="welcome-head">👋 चैट में स्वागत है!</div>
+            <div class="welcome-names" id="welcome-names"></div>
+          </div>
+          <div class="shout-card" id="shout">
+            <div class="shout-head" id="shout-head"></div>
+            <div class="shout-names" id="shout-names"></div>
+            <div class="shout-cta">अगला सवाल आपका? कमेंट कीजिए 👇</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="headline">
+        <span class="tag">BREAKING<br>बहस 🔥</span>
+        <div class="headline-text" id="topic"></div>
+      </section>
+
+      <section class="panels">
+        <div class="box" id="boxA"></div>
+        <div class="vs">VS</div>
+        <div class="box" id="boxB"></div>
+      </section>
+
+      <section class="poll" id="poll">
+        <span class="poll-name" id="poll-a"></span>
+        <div class="poll-bar" id="poll-bar"><i id="poll-fill"></i><b id="poll-pa"></b><b id="poll-pb"></b></div>
+        <span class="poll-name" id="poll-b"></span>
+        <div class="poll-cta" id="poll-cta"></div>
+      </section>
+
+      <section class="subs">
+        <div class="subs-speaker" id="subs-speaker"></div>
+        <div class="subs-text" id="subs-text"></div>
+      </section>
+
+      <section class="ticker"><div class="ticker-track" id="ticker"></div></section>
+
+      <div class="rain" id="rain"></div>
+      <div class="sticker" id="sticker"></div>
+      <div class="safe-zone">yt shorts ui</div>
+    </div>
+  </div>
+
+  <div class="start" id="start"><button id="start-btn">▶ शो शुरू करें</button><p id="start-msg"></p></div>
+
+  <template id="box-tpl">
+    <div class="portrait"></div>
+    <div class="speaking">🎙️ बोल रहे हैं</div>
+    <div class="asked">❓ सवाल आपसे</div>
+    <div class="winner-banner">🏆 विजेता</div>
+    <div class="score"></div>
+    <div class="strip">
+      <div class="strip-row"><span class="strip-name"></span><span class="side"></span></div>
+      <div class="strip-title"></div>
+      <canvas class="wave" width="440" height="56"></canvas>
+    </div>
+  </template>
+
+  <script src="stage.js"></script>
+</body>
+</html>
