@@ -16,6 +16,8 @@ class Character:
     catchphrase: str = ""                        # offered only in the closing statement
     politics: str = ""                           # added to the prompt only for political topics
     aliases: list = field(default_factory=list)  # other spellings viewers use (votes in chat)
+    examples: list = field(default_factory=list) # sample lines showing how they talk
+    name_hi: str = ""                            # name in Hindi script, so models don't mangle it
 
 
 def load_character(config_dir: Path, key: str) -> Character:
@@ -31,4 +33,6 @@ def load_character(config_dir: Path, key: str) -> Character:
         catchphrase=data.get("catchphrase", ""),
         politics=(data.get("politics") or "").strip(),
         aliases=data.get("aliases") or [],
+        examples=data.get("examples") or [],
+        name_hi=data.get("name_hi", ""),
     )

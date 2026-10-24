@@ -5,6 +5,7 @@ llm:
   base_url: http://localhost:11434/v1
   api_key: ollama
   model: gemma3-gpu         # gemma3:4b fitted to the 4 GB GPU (config/ollama/); CPU-only: gemma3:4b
+  short_model: gemma3:12b   # used by --short: better Hindi and jokes, ~10-15 min per script (too slow for live)
   temperature: 0.9          # higher = wilder, funnier, less coherent
   judge_temperature: 0.3
 

@@ -296,6 +296,19 @@ body.clean .controls { display: none; }
 .ticker-track span::after { content: "◆"; color: var(--gold); margin-left: 80px; }
 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
+/* end card (after the verdict) */
+.endcard {
+  position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 34px; text-align: center; padding: 0 60px 300px;
+  background: radial-gradient(circle at 50% 40%, rgba(225, 29, 46, .92), rgba(7, 11, 26, .97) 70%);
+  opacity: 0; pointer-events: none; transition: opacity .6s;
+}
+.endcard.on { opacity: 1; }
+.end-logo { font: 700 120px/1 var(--font-logo); letter-spacing: 4px; text-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.end-logo span { color: var(--gold); }
+.end-line { font: 800 52px/1.2 var(--font); }
+.end-line.big { font-size: 84px; color: #111; background: var(--gold); padding: 18px 40px 12px; border-radius: 24px; animation: nudge 1.6s ease-in-out infinite; }
+
 /* pop-up reaction stickers */
 .sticker {
   position: absolute; z-index: 10; pointer-events: none; white-space: nowrap;
@@ -332,3 +345,93 @@ body.show-safe .safe-zone { color: rgba(255, 255, 255, .35); background: repeati
 }
 .start p { font: 600 18px var(--font); color: var(--muted); max-width: 90vw; text-align: center; }
 .start.hidden { display: none; }
+
+/* =====================================================================
+   Shorts mode (?mode=short): one big speaker at a time, jump cuts,
+   camera moves, huge captions, less clutter, grain + vignette.
+   ===================================================================== */
+.spot, .big-caps, .peek, .flash, .grain, .vignette { display: none; }
+
+body.short .anchor, body.short .panels, body.short .poll, body.short .subs,
+body.short .ticker, body.short .meter, body.short .live { display: none; }
+body.short .spot, body.short .big-caps, body.short .flash, body.short .grain, body.short .vignette { display: block; }
+body.short .peek { display: block; }
+
+body.short .headline { top: 132px; min-height: 96px; }
+body.short .headline .tag { width: 130px; font-size: 24px; }
+body.short .headline-text { font-size: 36px; }
+
+.spot { position: absolute; top: 250px; left: 0; right: 0; height: 1360px; overflow: hidden; background: #050816; }
+.spot-cam, .spot-split { position: absolute; inset: 0; }
+.spot-layer { position: absolute; inset: 0; opacity: 0; will-change: transform; }
+.spot-layer.on { opacity: 1; }
+.spot-layer .portrait { position: absolute; inset: 0; }
+.spot-layer .portrait img { object-position: 50% 18%; }
+
+.spot-split { display: none; flex-direction: column; gap: 10px; background: #000; }
+.spot.split .spot-split { display: flex; }
+.spot.split .spot-cam, .spot.split .spot-tag { display: none; }
+.half { position: relative; flex: 1; overflow: hidden; }
+.half .portrait { position: absolute; inset: 0; }
+.half .portrait img { object-position: 50% 22%; }
+.half-name {
+  position: absolute; left: 24px; bottom: 20px; z-index: 2; font: 800 44px/1 var(--font); text-transform: uppercase;
+  background: rgba(0, 0, 0, .65); padding: 10px 18px 6px; border-left: 8px solid var(--c, var(--red)); border-radius: 6px;
+}
+.half.talking { box-shadow: inset 0 0 0 8px var(--gold); }
+.half.winner { box-shadow: inset 0 0 0 10px var(--gold); }
+.half.loser { filter: grayscale(.9) brightness(.55); }
+.half-badge {
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%); z-index: 2; display: none;
+  font: 800 54px/1 var(--font); background: var(--gold); color: #111; padding: 14px 28px 8px; border-radius: 14px;
+}
+.half.winner .half-badge { display: block; }
+
+.spot-tag {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 120px 34px 24px;
+  background: linear-gradient(180deg, transparent, rgba(5, 8, 22, .85) 55%, rgba(5, 8, 22, .97));
+}
+.spot-row { display: flex; align-items: center; gap: 16px; }
+.spot-name { font: 800 64px/1 var(--font); text-transform: uppercase; }
+.spot-title { font: 600 32px/1.2 var(--font); color: var(--muted); margin-top: 6px; }
+.spot-tag .side { font-size: 28px; }
+.spot-tag .wave { height: 56px; max-width: 640px; }
+
+.spot-comment {
+  position: absolute; top: 24px; left: 30px; right: 30px; z-index: 3; display: none;
+  background: #fffdf5; color: #111; border-left: 14px solid var(--gold); border-radius: 18px;
+  padding: 18px 24px; font: 800 44px/1.25 var(--font); box-shadow: 0 14px 34px rgba(0, 0, 0, .55);
+}
+.spot-comment b { display: block; font-size: 32px; color: var(--red); margin-bottom: 6px; }
+.spot-comment.on { display: block; animation: pop .45s cubic-bezier(.2, 1.4, .4, 1); }
+
+.big-caps {
+  position: absolute; left: 40px; right: 40px; top: 1130px; z-index: 6; text-align: center;
+  font: 800 100px/1.15 var(--font);
+}
+.big-caps span { color: #fff; -webkit-text-stroke: 7px #000; paint-order: stroke fill; text-shadow: 0 8px 24px rgba(0, 0, 0, .7); }
+.big-caps span.now { color: #ffe14d; }
+.big-caps.pop { animation: caps .22s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes caps { from { transform: scale(.75); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+
+.peek {
+  position: absolute; top: 270px; left: 30px; z-index: 7; font: 800 40px/1 var(--font); color: #111;
+  background: var(--gold); padding: 14px 22px 10px; border-radius: 12px; opacity: 0; transition: opacity .2s;
+}
+.peek.on { opacity: 1; animation: nudge 1s ease-in-out infinite; }
+
+.flash { position: absolute; inset: 0; z-index: 11; background: #fff; opacity: 0; pointer-events: none; }
+.flash.go { animation: flash .18s ease-out; }
+@keyframes flash { from { opacity: .55; } to { opacity: 0; } }
+
+/* film grain + vignette so it doesn't look like flat computer graphics */
+.grain {
+  position: absolute; inset: -50%; z-index: 13; pointer-events: none; opacity: .09; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain .6s steps(6) infinite;
+}
+@keyframes grain {
+  0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -3%); }
+  60% { transform: translate(-2%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); }
+}
+.vignette { position: absolute; inset: 0; z-index: 12; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0, 0, 0, .55) 100%); }

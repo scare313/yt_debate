@@ -16,6 +16,7 @@ from datetime import datetime
 from .characters import Character
 from .chat import ChatState
 from .llm import LLM
+from .speech_text import WORDS
 from .storage import Scoreboard
 
 LANGUAGE_RULES = {
@@ -24,7 +25,10 @@ LANGUAGE_RULES = {
     "english": "Speak in simple, punchy English. An occasional Indian expression is fine.",
     "hindi": "Speak in simple spoken Hindi using only Devanagari script. Your words will be read aloud "
              "by a Hindi voice, so write English words, brand names, abbreviations and all numbers in "
-             "Devanagari too (for example टीवी not TV, दस not 10), never in English letters or digits.",
+             "Devanagari too (for example टीवी not TV, दस not 10), never in English letters or digits. "
+             "Use everyday spoken Hindi (बोलचाल), the way people argue at a chai stall: short sentences and "
+             "common words. Avoid formal or Sanskrit-heavy words (say 'असल में' not 'वास्तव में'). "
+             "Say money in words people use, like 'पाँच हज़ार डॉलर' or 'दस हज़ार रुपये', never codes like CAD or INR.",
 }
 
 # classic format
@@ -50,8 +54,14 @@ PANELIST_TASKS = {
 TURN_RULES = (
     "Stay on the exact topic. Every sentence must be about the topic itself, not about other subjects. "
     "Talk like a real person in a heated but funny argument, not like a speech. "
-    "Never repeat a point, joke or phrase that was already said in this debate."
+    "Never repeat a point, joke or phrase that was already said in this debate. "
+    "End on the punchline: the last few words must be the funniest part. "
+    "Use specific, concrete details (amounts, places, relatives' names) instead of general statements. "
+    "Mention any of your personal running gags (a year, a relative, a catchphrase) at most once in the "
+    "whole debate. If it lands well, throw your opponent's earlier words back at them. "
+    "When you mention the topic, use the topic's exact words (same verb, same nouns)."
 )
+BANNED_OPENERS = "बिल्कुल, बिलकुल, देखिए, देखो, सुनो, सुनिए, अरे भाई"
 
 CONTENT_RULES = (
     "Be funny and sharp, but keep it clean: no slurs, no hate about religion, caste, gender, "
@@ -69,6 +79,16 @@ POLITICAL_HINTS = (
 
 # Latin-letter words that the speech converter can't fix (acronyms like GST are fine).
 LATIN_WORD = re.compile(r"\b(?![A-Z]{2,6}\b)[A-Za-z]{2,}\b")
+
+
+def unspeakable_words(text: str) -> list[str]:
+    """English-letter words a Hindi voice would stumble on (known words and acronyms are fine)."""
+    found = []
+    for w in re.findall(r"[A-Za-z]{2,}", text):   # also catches letters glued inside Hindi words
+        if (w.isupper() and len(w) <= 6) or w.lower() in WORDS:
+            continue                              # acronyms (GST) and known words are spoken fine
+        found.append(w)
+    return found
 
 
 class Debate:
@@ -112,6 +132,9 @@ class Debate:
         }
         started = time.time()
 
+        self.plan = self._writers_room(topic, order)
+        self.record["plan"] = self.plan
+        self._used = {}
         self._host_intro(topic, order)
         if fmt == "classic":
             self._run_classic(topic, order)
@@ -121,6 +144,7 @@ class Debate:
         verdict = self._judge(topic)
         self.record["verdict"] = verdict
         self._host_verdict(topic, verdict)
+        self.record["highlight"] = self._pick_highlight(topic)
 
         winner = verdict["winner"] if verdict["winner"] in self.sides else None
         self.scoreboard.record([d.key for d in self.debaters], winner)
@@ -161,9 +185,14 @@ class Debate:
             opp = other[target.key]
             task = (f"Ask {target.name} a tough follow-up question: challenge their weakest point so far, "
                     f"or put {opp.name}'s last point to them. Address {target.name} by name.")
+            esc = (self.plan or {}).get("escalation") or []
+            if i < len(esc) and esc[i]:
+                task += f" The show is escalating; this question's angle: {esc[i]}"
             if interrupted_by:
                 task = (f"{interrupted_by.name} just interrupted rudely. Cut them off dramatically "
                         f"(\"एक मिनट! एक मिनट!\"), then " + task[0].lower() + task[1:])
+            else:
+                task += " Nobody interrupted just now, so don't say 'एक मिनट'."
             self._anchor(topic, task, to=target)
             self._panelist(topic, target, "answer")
 
@@ -177,11 +206,82 @@ class Debate:
                 interrupted_by = None
             target = opp
 
-        # Final lines.
-        self._anchor(topic, f"Time is almost up. Ask both panelists for one final line, starting with {a.name}.",
-                     to=a)
-        self._panelist(topic, a, "closing", max_words=40)
-        self._panelist(topic, b, "closing", max_words=40)
+        # Final lines (Shorts skip the anchor's lead-in to save time).
+        if self.s.get("final_question", True):
+            self._anchor(topic, f"Time is almost up. Ask both panelists for one final line, starting with {a.name}.",
+                         to=a)
+        final = int(self.s.get("final_words", 40))
+        self._panelist(topic, a, "closing", max_words=final)
+        self._panelist(topic, b, "closing", max_words=final)
+
+    # ---------- writers' room ----------
+
+    def _writers_room(self, topic: str, order: list[Character]) -> dict | None:
+        """Before anyone speaks, plan the comedy: angles, roasts, escalation and an ending twist.
+        Each turn then uses one item, so the debate builds instead of wandering."""
+        (self.voice or self.printer).info("✍️  Writers' room is planning the jokes...")
+        cast = "\n\n".join(
+            f"{d.key} — {d.name} ({d.title}), argues {self.sides[d.key]} the topic:\n{d.persona[:700]}"
+            for d in order)
+        keys = [d.key for d in order]
+        raw = self.llm.chat(
+            "You are the head writer of a Hindi comedy TV debate show in the style of Indian prime-time news. "
+            "Plan the jokes before the show. Be specific, concrete and funny, and keep it clean: "
+            "no religion, caste or community jokes, no real politicians.",
+            f"Topic: \"{topic}\"\n\nCharacters:\n{cast}\n\n"
+            "Write the plan in English. Reply with JSON only, in this shape:\n"
+            "{\"angles\": {" + ", ".join(f'"{k}": ["3 funny arguments from {k}\'s own life about THIS topic, one sentence each, with concrete details"]' for k in keys) + "}, "
+            "\"roasts\": {" + ", ".join(f'"{k}": ["2 short roasts {k} can throw at the opponent"]' for k in keys) + "}, "
+            "\"escalation\": [\"3 anchor question angles, each more absurd and heated than the last\"], "
+            "\"twist\": \"a surprising, funny idea for the final lines\"}",
+            temperature=0.9, max_tokens=700, json_mode=True,
+        )
+        try:
+            plan = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            m = re.search(r"\{.*\}", raw or "", re.DOTALL)
+            try:
+                plan = json.loads(m.group(0)) if m else None
+            except json.JSONDecodeError:
+                plan = None
+        if not isinstance(plan, dict):
+            return None
+        # Normalise shapes; small models are sloppy.
+        listify = lambda v: [str(x) for x in v] if isinstance(v, list) else ([str(v)] if v else [])
+        return {
+            "angles": {k: listify((plan.get("angles") or {}).get(k)) for k in keys},
+            "roasts": {k: listify((plan.get("roasts") or {}).get(k)) for k in keys},
+            "escalation": listify(plan.get("escalation")),
+            "twist": str(plan.get("twist") or ""),
+        }
+
+    def _plan_hint(self, speaker: Character, kind: str) -> str:
+        """Hand the speaker the next unused idea from the writers' plan."""
+        if not self.plan:
+            return ""
+        def next_item(bucket: str) -> str:
+            items = self.plan[bucket].get(speaker.key) or []
+            n = self._used.get((bucket, speaker.key), 0)
+            self._used[(bucket, speaker.key)] = n + 1
+            return items[n] if n < len(items) else ""
+        if kind == "cutin":
+            idea = next_item("roasts")
+            return f"\nWriters' idea for this interruption (adapt it, in Hindi): {idea}" if idea else ""
+        if kind == "closing":
+            roast, twist = next_item("roasts"), self.plan.get("twist")
+            bits = [f"a last roast: {roast}" if roast else "", f"the ending twist: {twist}" if twist else ""]
+            bits = [b for b in bits if b]
+            return f"\nWriters' ideas for your final line (adapt, in Hindi): {'; '.join(bits)}" if bits else ""
+        idea = next_item("angles")
+        return f"\nWriters' idea for this turn (adapt it in your own words, in Hindi): {idea}" if idea else ""
+
+    def _opener_rule(self, speaker: Character) -> str:
+        """Stop every turn starting with the same words."""
+        used = [" ".join(t["text"].split()[:2]) for t in self.record["turns"] if t["speaker"] == speaker.key]
+        rule = f" Don't start with {BANNED_OPENERS}."
+        if used:
+            rule += " Your earlier turns started with: " + " / ".join(f"'{u}'" for u in used[-3:]) + "; start differently."
+        return rule
 
     # ---------- chat breaks ----------
 
@@ -252,9 +352,11 @@ class Debate:
             f"Tonight's topic: \"{topic}\"\n"
             f"Panelists:\n{panel}\n\n"
             f"Open the show: hype the topic dramatically, introduce both panelists and which side "
-            f"each one is on, and tell viewers to post their questions in the comments. Max 50 words."
+            f"each one is on, and tell viewers to post their questions in the comments. "
+            f"Max {self.s.get('intro_words', 50)} words."
         )
-        self._speak(self.host, "intro", self._system_for(self.host, extra=""), user, max_words=50, kind="intro")
+        self._speak(self.host, "intro", self._system_for(self.host, extra=""), user,
+                    max_words=int(self.s.get("intro_words", 50)), kind="intro")
 
     def _anchor(self, topic: str, task: str, to: Character, max_words: int = 35, comment: dict | None = None,
                 kind: str | None = None, extra: dict | None = None):
@@ -262,7 +364,8 @@ class Debate:
         system = self._system_for(self.host, extra=(
             f"You are moderating a live debate on \"{topic}\". Panelists: {panel}.\n"
             f"Keep every turn short, punchy and dramatic, and speak directly to the person you address. "
-            f"Never answer the question yourself and never take sides."
+            f"Never answer the question yourself and never take sides. "
+            f"Say 'एक मिनट' only when you are told someone just interrupted."
         ))
         history = self._history_text()
         user = (
@@ -289,7 +392,7 @@ class Debate:
         user = (
             f"Debate so far:\n{self._history_text()}\n\n"
             f"Topic reminder: \"{topic}\" (you are {side} it)\n"
-            f"{task}\n{TURN_RULES}{closing_line}\n"
+            f"{task}{self._plan_hint(speaker, kind)}\n{TURN_RULES}{self._opener_rule(speaker)}{closing_line}\n"
             f"Reply with ONLY your spoken words, max {max_words} words."
         )
         extra = {"comment": comment} if comment else None
@@ -305,7 +408,9 @@ class Debate:
         user = (
             (f"Debate so far:\n{history}\n\n" if history else "You speak first.\n\n")
             + f"Topic reminder: \"{topic}\" (you are {side} it)\n"
-            f"Round: {rnd.upper()}. {ROUND_TASKS[rnd]}\n{TURN_RULES}{closing_line}\n"
+            f"Round: {rnd.upper()}. {ROUND_TASKS[rnd]}"
+            f"{self._plan_hint(speaker, {'opening': 'answer', 'rebuttal': 'answer'}.get(rnd, rnd))}\n"
+            f"{TURN_RULES}{self._opener_rule(speaker)}{closing_line}\n"
             f"Reply with ONLY your spoken words, max {self.s['max_words_per_turn']} words, 2-3 sentences."
         )
         self._speak(speaker, f"{side} · {rnd}", self._panelist_system(speaker, opponent, topic), user,
@@ -360,11 +465,31 @@ class Debate:
             reason = next((r for r in reasons if names[winner] in r), "")
         return {
             "winner": winner,
-            "score": f"{round(avg[a])}-{round(avg[b])}",
+            "score": (f"{round(avg[a])}-{round(avg[b])}" if round(avg[a]) != round(avg[b]) or winner == "draw"
+                      else f"{avg[a]:.1f}-{avg[b]:.1f}"),
             "scores": {k: round(v, 1) for k, v in avg.items()},
             "reason": reason,
             "raw": raws,
         }
+
+    def _pick_highlight(self, topic: str) -> int | None:
+        """Index of the most savage/funny line, used as the cold open of a Short."""
+        candidates = [(i, t) for i, t in enumerate(self.record["turns"])
+                      if t["speaker"] in self.sides and t["kind"] not in ("intro", "verdict")]
+        if not candidates:
+            return None
+        listing = "\n".join(f"{n}. {t['name']}: {t['text']}" for n, (_, t) in enumerate(candidates))
+        raw = self.llm.chat(
+            "You are a YouTube Shorts editor. Pick the single line that would make the best first "
+            "three seconds of a Short: the funniest, most savage or most shocking line.",
+            f"Debate topic: \"{topic}\"\n\n{listing}\n\nReply with JSON only: {{\"line\": <number>}}",
+            temperature=0.2, max_tokens=30, json_mode=True,
+        )
+        m = re.search(r"\d+", raw or "")
+        n = int(m.group(0)) if m else -1
+        if not 0 <= n < len(candidates):  # fall back to an interruption, they are usually the punchiest
+            n = next((k for k, (_, t) in enumerate(candidates) if t["kind"] == "cutin"), 0)
+        return candidates[n][0]
 
     def _host_verdict(self, topic: str, verdict: dict):
         names = {d.key: d.name for d in self.debaters}
@@ -383,9 +508,10 @@ class Debate:
         user = (
             f"The debate on \"{topic}\" is over. Judge's decision: {result}\n"
             f"Announce the result dramatically and roast the loser lightly. {thanks}ask viewers to comment "
-            f"their questions for the next episode, and sign off. Max 55 words."
+            f"their questions for the next episode, and sign off. Max {self.s.get('verdict_words', 55)} words."
         )
-        self._speak(self.host, "verdict", self._system_for(self.host, extra=""), user, max_words=55, kind="verdict")
+        self._speak(self.host, "verdict", self._system_for(self.host, extra=""), user,
+                    max_words=int(self.s.get("verdict_words", 55)), kind="verdict")
 
     # ---------- helpers ----------
 
@@ -400,9 +526,17 @@ class Debate:
         return self._system_for(speaker, extra=extra)
 
     def _system_for(self, char: Character, extra: str) -> str:
+        examples = ("Examples of how you talk (match this style and energy, but never repeat these lines):\n"
+                    + "\n".join(f"- {e}" for e in char.examples)) if char.examples else ""
+        cast = [self.host, *self.debaters]
+        spellings = ("Write people's names in Hindi script exactly like this: "
+                     + ", ".join(f"{c.name} = {c.name_hi}" for c in cast if c.name_hi) + "."
+                     if self.s["language"] == "hindi" else "")
         parts = [
             char.persona,
+            examples,
             extra,
+            spellings,
             LANGUAGE_RULES[self.s["language"]],
             CONTENT_RULES,
             "Stay fully in character. No stage directions, no emojis, no hashtags, "
@@ -431,8 +565,10 @@ class Debate:
         text = re.sub(rf"^[\W_]*{re.escape(char.name)}[*_\s]*:[*_\s]*", "", text, flags=re.IGNORECASE).strip()
         # Drop stage directions like "(dramatic music swells)": never spoken, so never captioned.
         text = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]\s*", " ", text).strip()
+        text = strip_speaker_label(text)
+        text = trim_words(text, int(max_words * 1.25))
         raw_text = None
-        if self.s["language"] == "hindi" and len(LATIN_WORD.findall(text)) >= 2:
+        if self.s["language"] == "hindi" and unspeakable_words(text):
             raw_text, text = text, self._to_devanagari(text)
         secs = round(time.time() - t0, 1)
         turn = {
@@ -458,10 +594,30 @@ class Debate:
             "You convert text to Devanagari script. Keep the exact same words, meaning and tone. "
             "Transliterate every Hindi or English word written in English letters into Devanagari "
             "(e.g. 'Vikas mein toh jaago' -> 'विकास में तो जागो', 'business' -> 'बिज़नेस'). "
-            "Output only the converted text, nothing else.",
+            "If a word is not Hindi or English at all (a glitch from another language), replace it with "
+            "the right Hindi word for the meaning. Output only the converted text, nothing else.",
             text, temperature=0.1, max_tokens=len(text) * 2,
         )
         return fixed or text
+
+
+def strip_speaker_label(text: str) -> str:
+    """Drop a script-style label at the start, in any script: "रितिका: ...", "टीवारी जी: ...", "Host: ..."."""
+    m = re.match(r"^[\s*\"“'‘]*([^\s:：]+(?:\s+[^\s:：]+){0,2})\s*[:：]\s*", text)
+    if m and len(m.group(1)) <= 25 and len(text) > m.end() + 10:
+        return text[m.end():].lstrip(" *\"”'’")
+    return text
+
+
+def trim_words(text: str, limit: int) -> str:
+    """Small models ignore word limits. Cut at the last sentence end that fits, so it still sounds natural."""
+    words = text.split()
+    if len(words) <= limit:
+        return text
+    cut = " ".join(words[:limit])
+    ends = [cut.rfind(p) for p in ("।", "!", "?", ".")]
+    end = max(ends)
+    return cut[: end + 1] if end > len(cut) // 3 else cut.rstrip(",;:—-") + "…"
 
 
 def is_political(topic: str) -> bool:

@@ -34,6 +34,15 @@ python3 -m venv .venv
 .venv/bin/python debate.py --format classic "..."         # fixed rounds instead of the news show
 ```
 
+Writing: before each debate a "writers' room" step plans the jokes (angles, roasts, escalation,
+an ending twist), and every turn uses one idea from that plan. Each character's file has
+`examples:` lines that show the model how they talk; edit them to tune the humour.
+
+Edit by hand (best for Shorts): every debate also saves `data/debates/<id>.script.txt`.
+`--script-only` writes just the script (no voices). Rewrite, delete or add lines ("+ name: ..."),
+then voice it with `.venv/bin/python tools/voice_script.py "data/debates/<id>.script.txt"`.
+The voiced result becomes the newest debate, so the show screen plays it next.
+
 Viewer chat: pass real comments with `--comments-file` (see `examples/comments_sample.txt`).
 Every message is sorted automatically: greetings become Ritika's welcome roll-call, emojis rain
 on screen, "team X" / "X op" / "X galat" count as poll votes, the best questions are read on air,

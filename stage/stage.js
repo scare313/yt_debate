@@ -2,7 +2,11 @@
 //
 // URL options:  ?debate=<id>   which debate (default: newest)
 //               ?clean         hide the preview controls (for recording)
+//               ?autoplay      start playing by itself (OBS allows sound without a click)
 //               ?safe          show the Shorts UI safe zone
+//               ?mode=short    Shorts layout: one big speaker, jump cuts, camera moves, big captions,
+//                              cold open on the debate's best line, sound effects
+//               ?nosfx         no sound effects
 
 const W = 1080, H = 1920;
 const params = new URLSearchParams(location.search);
@@ -14,7 +18,8 @@ const COLORS = {
   bright_yellow: "#facc15", yellow: "#ca8a04", bright_blue: "#60a5fa", blue: "#2563eb", white: "#e5e7eb",
 };
 const SIDE_LABEL = { FOR: "पक्ष में", AGAINST: "विपक्ष में" };
-const WORDS_PER_CAPTION = 7;
+const SHORT = params.get("mode") === "short";
+const WORDS_PER_CAPTION = SHORT ? 3 : 7;
 const CTA_LINES = ["🎙️ स्टूडियो से लाइव", "💬 सवाल पूछिए कमेंट में — रितिका अगले शो में पढ़ेंगी!"];
 // How much each kind of turn heats up the drama meter (0-100)
 const DRAMA = { intro: 8, question: 3, answer: 5, cutin: 16, comment: 9, viewer: 7, closing: 5,
@@ -29,11 +34,14 @@ let boxes = {};               // character key -> box element (anchor included)
 let audio = null, ctx = null, analyser = null, waveData = null;
 let curTurn = -1, curWord = -1;
 let rainPlan = [], rainNext = 0, lastT = 0;   // scheduled emoji rain
+let segments = [{ s: 0, e: Infinity }], seg = 0; // playback order (Shorts: cold open first)
+let spot = {}, halves = {};                       // Shorts mode: full-screen layers / split halves
 
 // ---------- setup ----------
 
 if (params.has("clean")) document.body.classList.add("clean");
 if (params.has("safe")) document.body.classList.add("show-safe");
+if (SHORT) document.body.classList.add("short");
 
 function fit() {
   const controls = document.body.classList.contains("clean") ? 0 : $("controls").offsetHeight;
@@ -100,11 +108,23 @@ async function load(id) {
   // Fetch the audio as a blob so seeking works without HTTP range support.
   const blob = await (await fetch(`/data/debates/${enc(debate.audio_full)}`)).blob();
   audio = new Audio(URL.createObjectURL(blob));
-  audio.addEventListener("ended", () => ($("play").textContent = "▶"));
+  audio.addEventListener("ended", () => {
+    $("play").textContent = "▶";
+    $("endcard").classList.add("on");
+    document.title = "DONE";          // lets a recording script know the show has finished
+  });
+  audio.addEventListener("play", () => $("endcard").classList.remove("on"));
+  audio.addEventListener("timeupdate", checkSegment);
   ctx && connectAnalyser();
+  segments = SHORT ? coldOpenSegments() : [{ s: 0, e: Infinity }];
+  seg = 0;
   curTurn = curWord = -1;
-  render(0);
-  startMessage(`${debate.topic}`);
+  render(segments[0].s);
+  if (params.has("autoplay")) {
+    setTimeout(() => play().catch(() => startMessage(debate.topic)), 800); // short lead-in for recording
+  } else {
+    startMessage(`${debate.topic}`);
+  }
 }
 
 function charInfo(key) {
@@ -135,6 +155,50 @@ function portrait(el, key) {
   tryNext(0);
 }
 
+// Shorts: a full-screen layer per character (instant jump cuts) and a split view for clashes.
+function buildSpot(debaters) {
+  spot = {}; halves = {};
+  $("spot-cam").innerHTML = "";
+  $("spot-split").innerHTML = "";
+  for (const key of [hostKey, ...debaters]) {
+    const layer = document.createElement("div");
+    layer.className = "spot-layer";
+    layer.innerHTML = `<div class="portrait"></div>`;
+    portrait(layer.firstChild, key);
+    $("spot-cam").append(layer);
+    spot[key] = layer;
+  }
+  for (const key of debaters) {
+    const half = document.createElement("div");
+    half.className = "half";
+    half.style.setProperty("--c", charInfo(key).color);
+    half.innerHTML = `<div class="portrait"></div><div class="half-badge">🏆 विजेता</div><div class="half-name">${escapeHTML(charInfo(key).name)}</div>`;
+    portrait(half.firstChild, key);
+    $("spot-split").append(half);
+    halves[key] = half;
+  }
+}
+
+// The best line plays first (≈3-8 s), then the debate from the top.
+function coldOpenSegments() {
+  let turn = debate.highlight != null ? debate.turns[debate.highlight] : null;
+  if (!turn || turn.start_s === undefined) {
+    const panel = turns.filter((t) => t.speaker in debate.sides);
+    turn = panel.find((t) => t.kind === "cutin") ||
+      [...panel].sort((a, b) => (b.text.match(/[!?]/g) || []).length - (a.text.match(/[!?]/g) || []).length)[0];
+  }
+  if (!turn) return [{ s: 0, e: Infinity }];
+  let end = turn.start_s + Math.min(turn.audio_seconds, 7);
+  for (const w of turn._words || []) {   // stop at the first sentence end after 3 s
+    if (w.start - turn.start_s >= 3 && /[!?।.]$/.test(w.w)) {
+      const next = turn._words[turn._words.indexOf(w) + 1];
+      end = next ? next.start : turn.start_s + turn.audio_seconds;
+      break;
+    }
+  }
+  return [{ s: turn.start_s, e: Math.min(end, turn.start_s + 8.5), peek: true }, { s: 0, e: Infinity }];
+}
+
 function build(debaters) {
   boxes = {};
   // Anchor
@@ -162,6 +226,7 @@ function build(debaters) {
   });
 
   $("topic").textContent = debate.topic;
+  if (SHORT) buildSpot(debaters);
 
   // Ticker: every chat message that passed moderation, plus running gags and calls to comment
   const chat = debate.chat || { messages: (debate.comments || []).map((c) => ({ ...c, kind: "question" })), votes: {} };
@@ -258,8 +323,10 @@ async function play() {
   if (!ctx) {
     ctx = new AudioContext();
     connectAnalyser();
+    SFX.init(ctx, SHORT);
   }
   await ctx.resume();
+  if (audio.currentTime === 0 && seg === 0 && segments[0].s > 0) audio.currentTime = segments[0].s;
   $("start").classList.add("hidden");
   await audio.play();
   $("play").textContent = "⏸";
@@ -267,7 +334,7 @@ async function play() {
 
 $("start-btn").onclick = play;
 $("play").onclick = () => (audio && !audio.paused ? (audio.pause(), ($("play").textContent = "▶")) : play());
-$("restart").onclick = () => { if (audio) { audio.currentTime = 0; play(); } };
+$("restart").onclick = () => { if (audio) { seg = 0; audio.currentTime = segments[0].s; play(); } };
 $("pick").onchange = async (e) => {
   const url = new URL(location);
   url.searchParams.set("debate", e.target.value);
@@ -335,6 +402,12 @@ function onTurn(i) {
     if (top.length) for (let k = 0; k < 18; k++) spawnEmoji(top[k % top.length], 90 + ((k * 137) % 900), k * 0.06, (k % 7) * 9 - 27);
   }
 
+  if (SHORT) shortTurn(turn, kind, verdictNow);
+  if (audio && !audio.paused) {
+    if (kind === "cutin") SFX.ooh();
+    if (verdictNow) { SFX.boom(); SFX.applause(); }
+  }
+
   const info = charInfo(turn.speaker);
   $("subs-speaker").textContent = info.name;
   $("subs-speaker").style.setProperty("--c", info.color);
@@ -352,14 +425,65 @@ function spawnEmoji(e, x, delay = 0, rot = 15) {
   $("rain").append(el);
 }
 
+function shortTurn(turn, kind, verdictNow) {
+  const split = kind === "cutin" || verdictNow;
+  $("spot").classList.toggle("split", split);
+  for (const [key, layer] of Object.entries(spot)) layer.classList.toggle("on", key === turn.speaker);
+  const v = debate.verdict || {};
+  for (const [key, half] of Object.entries(halves)) {
+    half.classList.toggle("talking", !verdictNow && key === turn.speaker);
+    half.classList.toggle("winner", verdictNow && v.winner === key);
+    half.classList.toggle("loser", verdictNow && v.winner && v.winner !== "draw" && v.winner !== key);
+  }
+  const info = charInfo(turn.speaker);
+  $("spot-name").textContent = info.name;
+  $("spot-name").style.color = info.color;
+  $("spot-title").textContent = info.title;
+  const side = debate.sides[turn.speaker];
+  $("spot-side").textContent = side ? SIDE_LABEL[side] : "";
+  $("spot-side").className = `side ${side === "FOR" ? "for" : side ? "against" : ""}`;
+  $("spot-side").style.display = side ? "" : "none";
+  const c = turn.comment;
+  $("spot-comment").classList.toggle("on", !!c);
+  if (c) $("spot-comment").innerHTML = `<b>💬 ${escapeHTML(c.name)} का सवाल</b>${escapeHTML(c.text)}`;
+  // jump cut: flash + whoosh
+  $("flash").classList.remove("go"); void $("flash").offsetWidth; $("flash").classList.add("go");
+  if (audio && !audio.paused) SFX.whoosh();
+}
+
+// Camera: slow push-in over each turn, a quick punch-in on "!" / "?" words, a shake on interruptions.
+function camera(turn, t) {
+  const layer = $("spot").classList.contains("split")
+    ? halves[turn.speaker]?.querySelector(".portrait")
+    : spot[turn.speaker];
+  if (!layer) return;
+  const p = Math.max(0, Math.min(1, (t - turn.start_s) / Math.max(turn.audio_seconds, 1)));
+  let scale = 1.02 + 0.08 * p;
+  for (const w of turn._words || []) {
+    const dt = t - w.start;
+    if (dt >= 0 && dt < 0.4 && /[!?]$/.test(w.w)) scale += 0.07 * (1 - dt / 0.4);
+  }
+  let x = 0, y = 0;
+  const since = t - turn.start_s;
+  if ((turn.kind === "cutin" || turn.kind === "verdict") && since >= 0 && since < 0.5) {
+    const k = (1 - since / 0.5) * 14;
+    x = Math.sin(t * 90) * k; y = Math.cos(t * 70) * k;
+  }
+  layer.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+}
+
 function sticker(text, target, cls) {
+  if (!audio || audio.paused) return;      // only react to what's actually playing
+  SFX.ding();
+  if (SHORT && target && !$("spot").contains(target)) target = $("spot");
   const el = $("sticker");
   if (!target) return;
   // Centre the sticker on the top part of the target, in frame (1080x1920) coordinates.
   const f = $("frame").getBoundingClientRect(), r = target.getBoundingClientRect();
   const scale = f.width / W;
-  el.style.left = `${(r.left - f.left + r.width / 2) / scale}px`;
-  el.style.top = `${(r.top - f.top) / scale + 90}px`;
+  const x = (r.left - f.left + r.width / 2) / scale, y = (r.top - f.top) / scale + 90;
+  el.style.left = `${Number.isFinite(x) && r.width ? x : W / 2}px`;
+  el.style.top = `${Number.isFinite(y) && r.height ? y : 420}px`;
   el.textContent = text;
   el.className = `sticker ${cls}`;
   void el.offsetWidth; // restart the animation
@@ -374,11 +498,13 @@ function showVerdict(on) {
     if (!box) continue;
     box.classList.toggle("winner", on && v.winner === key);
     box.classList.toggle("loser", on && v.winner && v.winner !== "draw" && v.winner !== key);
-    box.classList.toggle("scored", on);
+    box.classList.toggle("scored", on && (v.scores || /\d/.test(String(v.score || ""))));  // no badge if edited by hand
     // Older debates only have a "6-7" string whose order isn't reliable: winner gets the higher number.
     const nums = parts.map(Number).filter((n) => !isNaN(n)).sort((x, y) => y - x);
     const score = v.scores?.[key] ?? (v.winner === key ? nums[0] : nums[nums.length - 1]);
-    box.querySelector(".score").textContent = v.scores ? `स्कोर ${Math.round(score)}/20` : `स्कोर ${score ?? "?"}`;
+    const vals = Object.values(v.scores || {});
+    const close = vals.length === 2 && Math.round(vals[0]) === Math.round(vals[1]);
+    box.querySelector(".score").textContent = v.scores ? `स्कोर ${close ? score.toFixed(1) : Math.round(score)}/20` : `स्कोर ${score ?? "?"}`;
     if (on && v.winner === "draw") box.querySelector(".winner-banner").textContent = "🤝 बराबरी";
   }
 }
@@ -391,7 +517,12 @@ function renderCaption(turn, t) {
   curWord = w;
   const chunkStart = Math.floor(w / WORDS_PER_CAPTION) * WORDS_PER_CAPTION;
   const chunk = words.slice(chunkStart, chunkStart + WORDS_PER_CAPTION);
-  $("subs-text").innerHTML = chunk
+  const target = SHORT ? $("big-caps") : $("subs-text");
+  if (SHORT && target.dataset.chunk !== `${curTurn}:${chunkStart}`) {
+    target.dataset.chunk = `${curTurn}:${chunkStart}`;
+    target.classList.remove("pop"); void target.offsetWidth; target.classList.add("pop");
+  }
+  target.innerHTML = chunk
     .map((x, k) => {
       const idx = chunkStart + k;
       const cls = idx === w ? "now" : idx > w ? "future" : "";
@@ -431,6 +562,11 @@ function render(t) {
   const turn = turns[i];
   const speaking = t >= turn.start_s && t <= turn.start_s + turn.audio_seconds;
   renderCaption(turn, t);
+  if (SHORT) {
+    camera(turn, t);
+    $("peek").classList.toggle("on", !!segments[seg]?.peek);
+    drawWave($("spot-wave"), charInfo(turn.speaker).color, speaking && audio && !audio.paused);
+  }
 
   // The tag above Ritika's name alternates with a call to comment (driven by playback time,
   // so recordings come out the same every time).
@@ -456,7 +592,18 @@ function render(t) {
   }
 }
 
+// Shorts: when a segment ends (the cold open), jump to the next one with a cut.
+// Checked every frame and on the audio's own progress events (those keep firing in background tabs).
+function checkSegment() {
+  if (audio && !audio.paused && audio.currentTime >= segments[seg].e && seg + 1 < segments.length) {
+    seg++;
+    audio.currentTime = segments[seg].s;
+    curTurn = -1;
+  }
+}
+
 function loop() {
+  checkSegment();
   if (audio) {
     const t = audio.currentTime;
     render(t);

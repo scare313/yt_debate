@@ -21,7 +21,7 @@ from engine.chat import build_chat
 from engine.llm import LLM
 from engine.orchestrator import LANGUAGE_RULES, Debate
 from engine.safety import Blocklist
-from engine.storage import Scoreboard, new_debate_id, save_debate
+from engine.storage import Scoreboard, new_debate_id, save_debate, write_script
 from engine.voice import VoiceSession
 
 ROOT = Path(__file__).resolve().parent
@@ -56,6 +56,13 @@ def load_settings(args) -> dict:
         cfg["debate"]["exchanges"] = args.rounds         # news
     if args.format:
         cfg["debate"]["format"] = args.format
+    if args.short:  # a whole debate that fits a YouTube Short (~90-120 s)
+        cfg["debate"].update(exchanges=1, max_words_per_turn=28, max_chat_breaks=1, cutin_chance=0.6,
+                             rebuttal_rounds=1, intro_words=25, verdict_words=30, final_words=22,
+                             final_question=False)
+        # Shorts are written offline, so use the slower but better writer unless --model says otherwise.
+        if not args.model and cfg["llm"].get("short_model"):
+            cfg["llm"]["model"] = cfg["llm"]["short_model"]
     if args.words:
         cfg["debate"]["max_words_per_turn"] = args.words
     if args.language:
@@ -71,7 +78,7 @@ def load_settings(args) -> dict:
     if args.for_side and args.for_side not in cfg["cast"]["debaters"]:
         sys.exit(f"--for must be one of: {', '.join(cfg['cast']['debaters'])}")
     cfg["for_side"] = args.for_side
-    if args.no_voice:
+    if args.no_voice or args.script_only:
         cfg["voice"]["enabled"] = False
     cfg["voice"]["play"] = not args.silent
     return cfg
@@ -156,12 +163,17 @@ def run_one(topic: str, cfg: dict, blocklist: Blocklist, tts=None, chat_lines: l
         return False
 
     path = save_debate(DATA, record, debate_id)
+    script = write_script(DATA, record, debate_id)
     console.rule()
     v = record["verdict"]
     console.print(f"[bold]Winner:[/] {v['winner']}  [bold]Score:[/] {v['score']}  "
                   f"[dim]| generated in {record['total_seconds']}s | saved {os.path.relpath(path, ROOT)}[/]")
     if record.get("audio_full"):
         console.print(f"[dim]Audio: data/debates/{record['audio_full']}[/]")
+    rel = os.path.relpath(script, ROOT)
+    console.print(f"[dim]Script: {rel}[/]")
+    if not record.get("audio_full"):
+        console.print(f"[bold]Edit the script, then voice it:[/] .venv/bin/python tools/voice_script.py \"{rel}\"")
     return True
 
 
@@ -178,7 +190,10 @@ def main():
     p.add_argument("--comment", action="append", metavar='"NAME: TEXT"', help="viewer message (repeatable)")
     p.add_argument("--comments-file", help="viewer messages, one 'Name: message' per line (greetings, emojis, "
                                            "votes and questions are all handled)")
+    p.add_argument("--short", action="store_true", help="short punchy debate that fits a YouTube Short")
     p.add_argument("--no-voice", action="store_true", help="text only, no TTS")
+    p.add_argument("--script-only", action="store_true",
+                   help="write the debate as an editable script; voice it later with tools/voice_script.py")
     p.add_argument("--silent", action="store_true", help="generate and save audio, but don't play it")
     args = p.parse_args()
 

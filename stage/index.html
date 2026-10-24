@@ -85,6 +85,29 @@
 
       <section class="ticker"><div class="ticker-track" id="ticker"></div></section>
 
+      <!-- Shorts mode (?mode=short): one big speaker, jump cuts, big captions -->
+      <section class="spot" id="spot">
+        <div class="spot-cam" id="spot-cam"></div>
+        <div class="spot-split" id="spot-split"></div>
+        <div class="spot-tag" id="spot-tag">
+          <div class="spot-row"><span class="spot-name" id="spot-name"></span><span class="side" id="spot-side"></span></div>
+          <div class="spot-title" id="spot-title"></div>
+          <canvas class="wave" id="spot-wave" width="640" height="56"></canvas>
+        </div>
+        <div class="spot-comment" id="spot-comment"></div>
+      </section>
+      <div class="big-caps" id="big-caps"></div>
+      <div class="peek" id="peek">⚡ आगे देखिए...</div>
+      <div class="flash" id="flash"></div>
+      <div class="grain"></div>
+      <div class="vignette"></div>
+
+      <div class="endcard" id="endcard">
+        <div class="end-logo">DANGAL <span>24x7</span></div>
+        <div class="end-line big">🔔 सब्सक्राइब करें!</div>
+        <div class="end-line">💬 अगला टॉपिक कमेंट में बताइए</div>
+        <div class="end-line">📣 अगले एपिसोड में आपका नाम ऑन एयर!</div>
+      </div>
       <div class="rain" id="rain"></div>
       <div class="sticker" id="sticker"></div>
       <div class="safe-zone">yt shorts ui</div>
@@ -106,6 +129,7 @@
     </div>
   </template>
 
+  <script src="sfx.js"></script>
   <script src="stage.js"></script>
 </body>
 </html>

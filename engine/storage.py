@@ -23,6 +23,35 @@ def save_debate(data_dir: Path, debate: dict, debate_id: str) -> Path:
     return path
 
 
+def write_script(data_dir: Path, debate: dict, debate_id: str) -> Path:
+    """An easy-to-edit text version of the debate. Edit it, then voice it with tools/voice_script.py."""
+    path = data_dir / "debates" / f"{debate_id}.script.txt"
+    v = debate.get("verdict") or {}
+    lines = [
+        "# DANGAL 24x7 script. Edit the text after each \"name:\" and save. You can:",
+        "#   - rewrite any line (keep it in Hindi script for the best voice)",
+        "#   - delete a line you don't like",
+        "#   - add a new line by starting it with \"+ name:\" where you want it, e.g. \"+ imran: ...\"",
+        "#   - change WINNER below if you change who wins (then fix Ritika's verdict line too)",
+        f"# Then voice it:  .venv/bin/python tools/voice_script.py \"data/debates/{debate_id}.script.txt\"",
+        "#",
+        f"# Topic: {debate.get('topic', '')}",
+        "# Sides: " + ", ".join(f"{k} = {side}" for k, side in (debate.get("sides") or {}).items()),
+        "",
+        f"WINNER: {v.get('winner', 'draw')}",
+        "",
+    ]
+    for i, t in enumerate(debate.get("turns", []), 1):
+        tag = t.get("kind", "")
+        if t.get("to"):
+            tag += f" → {t['to']}"
+        if t.get("comment"):
+            tag += f" · {t['comment']['name']}"
+        lines.append(f"{i:02d} {t['speaker']} [{tag}]: {' '.join(t['text'].split())}")
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
 class Scoreboard:
     """Wins/losses/draws and streak per character. streak > 0 = winning run, < 0 = losing run."""
 
