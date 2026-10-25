@@ -56,4 +56,5 @@ def clean(text: str) -> str:
 def _allowed(ch: str) -> bool:
     if not unicodedata.category(ch).startswith(("L", "M")):
         return True                      # digits, punctuation, spaces, emoji
-    return ord(ch) < 0x250 or 0x900 <= ord(ch) <= 0x97F   # Latin or Devanagari
+    o = ord(ch)
+    return o < 0x250 or 0x1E00 <= o <= 0x1EFF or 0x900 <= o <= 0x97F   # Latin (incl. IAST ṇḍṛ) or Devanagari

@@ -4,3 +4,6 @@ data/
 .venv-tts/
 models/
 .claude/
+scripture/.cache/
+scripture/library/vedabase/
+scripture/data/

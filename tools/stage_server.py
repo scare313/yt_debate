@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-ALLOWED = ("stage/", "data/debates/")
+ALLOWED = ("stage/", "data/debates/", "scripture/stage/", "scripture/data/answers/")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 
 
@@ -39,6 +39,23 @@ def list_debates() -> list[dict]:
             "speakers": list(d.get("sides", {}).keys()),
             "seconds": round(last.get("start_s", 0) + last.get("audio_seconds", 0)),
         })
+    return sorted(out, key=lambda x: x["created_at"], reverse=True)
+
+
+def list_answers() -> list[dict]:
+    """Voiced Ask the Gita answers, newest first."""
+    out = []
+    for f in (ROOT / "scripture" / "data" / "answers").glob("*.json"):
+        try:
+            d = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not d.get("audio_full"):
+            continue
+        last = d["turns"][-1]
+        out.append({"id": f.stem, "question": d["question"], "asker": d.get("asker", ""),
+                    "verses": d.get("verses", []), "created_at": d.get("created_at", ""),
+                    "seconds": round(last.get("start_s", 0) + last.get("audio_seconds", 0))})
     return sorted(out, key=lambda x: x["created_at"], reverse=True)
 
 
@@ -66,6 +83,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(list_debates())
         if path == "/api/characters":
             return self._json(list_characters())
+        if path == "/api/answers":
+            return self._json(list_answers())
+        if path in ("/gita", "/gita/"):
+            self.send_response(302)
+            self.send_header("Location", "/scripture/stage/")
+            self.end_headers()
+            return
         rel = unquote(path).lstrip("/")
         if not rel.startswith(ALLOWED) or ".." in rel.split("/"):
             self.send_error(404)

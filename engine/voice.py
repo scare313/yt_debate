@@ -27,8 +27,10 @@ def find_player() -> list[str] | None:
 
 
 class VoiceSession:
-    def __init__(self, tts: PiperTTS, settings: dict, audio_dir: Path, printer, play: bool = True):
+    def __init__(self, tts: PiperTTS, settings: dict, audio_dir: Path, printer, play: bool = True,
+                 speech_fn=to_speech):
         self.tts = tts
+        self.speech_fn = speech_fn      # text -> what the voice reads (Hindi by default)
         self.s = settings
         self.audio_dir = audio_dir
         self.printer = printer
@@ -46,7 +48,7 @@ class VoiceSession:
 
     def turn(self, char: Character, label: str, text: str, turn: dict):
         v = char.voice
-        spoken = to_speech(text)
+        spoken = self.speech_fn(text)
         audio, sr = self.tts.synth(spoken, v["model"], float(v.get("speed", 1.0)), float(v.get("pitch", 1.0)))
         if v.get("call") and self.s.get("call_filter", True):
             audio = phone_filter(audio, sr)
